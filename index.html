@@ -1,1 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset Management</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #2563eb;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+        }
+
+        .status-dot.online {
+            background: #22c55e;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr 2fr;
+            }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #374151;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        .btn:hover {
+            background: #1d4ed8;
+        }
+
+        .btn.btn-secondary {
+            background: #6b7280;
+        }
+
+        .btn.btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .btn.btn-danger {
+            background: #ef4444;
+        }
+
+        .btn.btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .asset-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .asset-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .asset-item:hover {
+            background: #e2e8f0;
+            transform: translateY(-1px);
+        }
+
+        .asset-item.selected {
+            background: #dbeafe;
+            border-color: #2563eb;
+        }
+
+        .asset-item h3 {
+            color: #1e293b;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .asset-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .button-group .btn {
+            margin-top: 0;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+        }
+
+        .error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .success {
+            background: #f0fdf4;
+            color: #16a34a;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #64748b;
+        }
+
+        .empty-state h3 {
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Asset Management</h1>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="card">
+                <h2 id="formTitle">Add New Asset</h2>
+                
+                <div class="error" id="errorMessage"></div>
+                <div class="success" id="successMessage"></div>
+                
+                <form id="assetForm">
+                    <div class="form-group">
+                        <label for="assetName">Asset Name *</label>
+                        <input type="text" id="assetName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="assetType">Asset Type *</label>
+                        <select id="assetType" required>
+                            <option value="">Select Asset Type</option>
+                            <option value="Equipment">Equipment</option>
+                            <option value="Vehicle">Vehicle</option>
+                            <option value="Property">Property</option>
+                            <option value="Technology">Technology</option>
+                            <option value="Furniture">Furniture</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="supplier">Supplier *</label>
+                        <input type="text" id="supplier" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="purchaseDate">Purchase Date *</label>
+                        <input type="date" id="purchaseDate" required>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" class="btn" id="submitBtn">Add Asset</button>
+                        <button type="button" class="btn btn-secondary" id="cancelBtn" style="display: none;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Assets</h2>
+                <div class="loading" id="loading">Loading assets...</div>
+                <div class="asset-list" id="assetList">
+                    <div class="empty-state">
+                        <h3>No assets found</h3>
+                        <p>Add your first asset using the form on the left</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration - REPLACE THESE WITH YOUR ACTUAL VALUES
+        const CONFIG = {
+            API_KEY: 'AIzaSyCwRUtj-Toxq9FdfBzK6Wztco3oojIcgcE',
+            CLIENT_ID: '276342216052-b5hvo9u20t2qhtp36a82t7ag9gt5kfj2.apps.googleusercontent.com',
+            SHEET_ID: '1DaccKEJC_fSLdyBipOGbmeQ-RUmuUVMrjPLsHIFKmaM',
+            DISCOVERY_DOC: 'https://sheets.googleapis.com/$discovery/rest?version=v4',
+            SCOPES: 'https://www.googleapis.com/auth/spreadsheets'
+        };
+
+        // Application state
+        let gapi;
+        let isSignedIn = false;
+        let assets = [];
+        let editingAsset = null;
+        let offlineQueue = [];
+
+        // DOM elements
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const assetForm = document.getElementById('assetForm');
+        const formTitle = document.getElementById('formTitle');
+        const submitBtn = document.getElementById('submitBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const assetList = document.getElementById('assetList');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+
+        // Initialize the application
+        async function initializeApp() {
+            updateStatus('offline', 'Initializing...');
+            
+            // Load offline data
+            loadOfflineData();
+            renderAssets();
+            
+            // Try to initialize Google API
+            try {
+                await loadGoogleAPI();
+                await initializeGoogleAPI();
+                updateStatus('online', 'Connected');
+                await loadAssetsFromSheet();
+            } catch (error) {
+                console.error('Failed to initialize Google API:', error);
+                updateStatus('offline', 'Offline Mode');
+            }
+        }
+
+        // Load Google API
+        function loadGoogleAPI() {
+            return new Promise((resolve, reject) => {
+                if (window.gapi) {
+                    resolve();
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = 'https://apis.google.com/js/api.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // Initialize Google API
+        async function initializeGoogleAPI() {
+            await new Promise((resolve) => gapi.load('client:auth2', resolve));
+            
+            await gapi.client.init({
+                apiKey: CONFIG.API_KEY,
+                clientId: CONFIG.CLIENT_ID,
+                discoveryDocs: [CONFIG.DISCOVERY_DOC],
+                scope: CONFIG.SCOPES
+            });
+
+            const authInstance = gapi.auth2.getAuthInstance();
+            isSignedIn = authInstance.isSignedIn.get();
+            
+            if (!isSignedIn) {
+                await authInstance.signIn();
+                isSignedIn = true;
+            }
+        }
+
+        // Load assets from Google Sheet
+        async function loadAssetsFromSheet() {
+            if (!isSignedIn) return;
+            
+            showLoading(true);
+            
+            try {
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: CONFIG.SHEET_ID,
+                    range: 'Sheet1!A:D',
+                });
+
+                const rows = response.result.values || [];
+                
+                // Skip header row and convert to objects
+                assets = rows.slice(1).map((row, index) => ({
+                    id: index + 2, // Row number in sheet (starting from 2)
+                    name: row[0] || '',
+                    type: row[1] || '',
+                    supplier: row[2] || '',
+                    date: row[3] || ''
+                }));
+
+                saveOfflineData();
+                renderAssets();
+                showSuccess('Assets loaded successfully');
+                
+            } catch (error) {
+                console.error('Error loading assets:', error);
+                showError('Failed to load assets from Google Sheets');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Save asset to Google Sheet
+        async function saveAssetToSheet(asset) {
+            if (!isSignedIn) {
+                // Add to offline queue
+                offlineQueue.push({ action: 'add', asset });
+                saveOfflineData();
+                return;
+            }
+
+            try {
+                await gapi.client.sheets.spreadsheets.values.append({
+                    spreadsheetId: CONFIG.SHEET_ID,
+                    range: 'Sheet1!A:D',
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: [[asset.name, asset.type, asset.supplier, asset.date]]
+                    }
+                });
+
+                await loadAssetsFromSheet(); // Refresh to get correct IDs
+                
+            } catch (error) {
+                console.error('Error saving asset:', error);
+                throw error;
+            }
+        }
+
+        // Update asset in Google Sheet
+        async function updateAssetInSheet(asset) {
+            if (!isSignedIn) {
+                // Add to offline queue
+                offlineQueue.push({ action: 'update', asset });
+                saveOfflineData();
+                return;
+            }
+
+            try {
+                await gapi.client.sheets.spreadsheets.values.update({
+                    spreadsheetId: CONFIG.SHEET_ID,
+                    range: `Sheet1!A${asset.id}:D${asset.id}`,
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: [[asset.name, asset.type, asset.supplier, asset.date]]
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error updating asset:', error);
+                throw error;
+            }
+        }
+
+        // Delete asset from Google Sheet
+        async function deleteAssetFromSheet(assetId) {
+            if (!isSignedIn) {
+                // Add to offline queue
+                offlineQueue.push({ action: 'delete', assetId });
+                saveOfflineData();
+                return;
+            }
+
+            try {
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: CONFIG.SHEET_ID,
+                    resource: {
+                        requests: [{
+                            deleteDimension: {
+                                range: {
+                                    sheetId: 0,
+                                    dimension: 'ROWS',
+                                    startIndex: assetId - 1,
+                                    endIndex: assetId
+                                }
+                            }
+                        }]
+                    }
+                });
+
+                await loadAssetsFromSheet(); // Refresh list
+                
+            } catch (error) {
+                console.error('Error deleting asset:', error);
+                throw error;
+            }
+        }
+
+        // Form submission handler
+        assetForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(assetForm);
+            const asset = {
+                name: document.getElementById('assetName').value.trim(),
+                type: document.getElementById('assetType').value,
+                supplier: document.getElementById('supplier').value.trim(),
+                date: document.getElementById('purchaseDate').value
+            };
+
+            // Validation
+            if (!asset.name || !asset.type || !asset.supplier || !asset.date) {
+                showError('Please fill in all required fields');
+                return;
+            }
+
+            try {
+                if (editingAsset) {
+                    // Update existing asset
+                    asset.id = editingAsset.id;
+                    await updateAssetInSheet(asset);
+                    
+                    // Update local data
+                    const index = assets.findIndex(a => a.id === editingAsset.id);
+                    if (index !== -1) {
+                        assets[index] = asset;
+                    }
+                    
+                    showSuccess('Asset updated successfully');
+                } else {
+                    // Add new asset
+                    await saveAssetToSheet(asset);
+                    showSuccess('Asset added successfully');
+                }
+
+                saveOfflineData();
+                renderAssets();
+                resetForm();
+                
+            } catch (error) {
+                showError('Failed to save asset. Changes saved locally and will sync when online.');
+                
+                // Save locally anyway
+                if (editingAsset) {
+                    const index = assets.findIndex(a => a.id === editingAsset.id);
+                    if (index !== -1) {
+                        assets[index] = asset;
+                    }
+                } else {
+                    asset.id = Date.now(); // Temporary ID for offline
+                    assets.push(asset);
+                }
+                
+                saveOfflineData();
+                renderAssets();
+                resetForm();
+            }
+        });
+
+        // Cancel edit handler
+        cancelBtn.addEventListener('click', resetForm);
+
+        // Reset form to add mode
+        function resetForm() {
+            assetForm.reset();
+            editingAsset = null;
+            formTitle.textContent = 'Add New Asset';
+            submitBtn.textContent = 'Add Asset';
+            cancelBtn.style.display = 'none';
+        }
+
+        // Edit asset
+        function editAsset(asset) {
+            editingAsset = asset;
+            document.getElementById('assetName').value = asset.name;
+            document.getElementById('assetType').value = asset.type;
+            document.getElementById('supplier').value = asset.supplier;
+            document.getElementById('purchaseDate').value = asset.date;
+            
+            formTitle.textContent = 'Edit Asset';
+            submitBtn.textContent = 'Update Asset';
+            cancelBtn.style.display = 'inline-block';
+        }
+
+        // Delete asset
+        async function deleteAsset(asset) {
+            if (!confirm(`Are you sure you want to delete "${asset.name}"?`)) {
+                return;
+            }
+
+            try {
+                await deleteAssetFromSheet(asset.id);
+                
+                // Remove from local data
+                assets = assets.filter(a => a.id !== asset.id);
+                saveOfflineData();
+                renderAssets();
+                showSuccess('Asset deleted successfully');
+                
+            } catch (error) {
+                showError('Failed to delete asset. Change saved locally and will sync when online.');
+                
+                // Remove locally anyway
+                assets = assets.filter(a => a.id !== asset.id);
+                saveOfflineData();
+                renderAssets();
+            }
+        }
+
+        // Render assets list
+        function renderAssets() {
+            if (assets.length === 0) {
+                assetList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No assets found</h3>
+                        <p>Add your first asset using the form on the left</p>
+                    </div>
+                `;
+                return;
+            }
+
+            assetList.innerHTML = assets.map(asset => `
+                <div class="asset-item">
+                    <h3>${escapeHtml(asset.name)}</h3>
+                    <div class="asset-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Type</span>
+                            <span>${escapeHtml(asset.type)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Supplier</span>
+                            <span>${escapeHtml(asset.supplier)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Purchase Date</span>
+                            <span>${formatDate(asset.date)}</span>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-secondary" onclick="editAsset(${JSON.stringify(asset).replace(/"/g, '&quot;')})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteAsset(${JSON.stringify(asset).replace(/"/g, '&quot;')})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Utility functions
+        function updateStatus(status, text) {
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = text;
+        }
+
+        function showLoading(show) {
+            loading.style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            setTimeout(() => {
+                successMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString();
+        }
+
+        // Offline data management
+        function saveOfflineData() {
+            localStorage.setItem('assets', JSON.stringify(assets));
+            localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
+        }
+
+        function loadOfflineData() {
+            const savedAssets = localStorage.getItem('assets');
+            if (savedAssets) {
+                assets = JSON.parse(savedAssets);
+            }
+            
+            const savedQueue = localStorage.getItem('offlineQueue');
+            if (savedQueue) {
+                offlineQueue = JSON.parse(savedQueue);
+            }
+        }
+
+        // Initialize app when page loads
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        // Network status monitoring
+        window.addEventListener('online', () => {
+            updateStatus('online', 'Connected');
+            initializeApp(); // Try to sync when back online
+        });
+
+        window.addEventListener('offline', () => {
+            updateStatus('offline', 'Offline Mode');
+        });
+    </script>
+</body>
+</html>
