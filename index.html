@@ -6,6 +6,7 @@
     <title>Asset Management</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <style>
@@ -427,24 +428,56 @@
             }
             
             console.log('Loading gapi client and auth2...');
+            
+            // Use a more robust loading approach
             await new Promise((resolve, reject) => {
-                window.gapi.load('client:auth2', {
-                    callback: resolve,
-                    onerror: () => reject(new Error('Failed to load gapi client:auth2'))
-                });
+                const timeout = setTimeout(() => {
+                    reject(new Error('Timeout loading gapi client:auth2'));
+                }, 15000);
+                
+                try {
+                    window.gapi.load('client:auth2', {
+                        callback: () => {
+                            clearTimeout(timeout);
+                            console.log('GAPI client:auth2 loaded successfully');
+                            resolve();
+                        },
+                        onerror: (error) => {
+                            clearTimeout(timeout);
+                            console.error('Error loading gapi client:auth2:', error);
+                            reject(new Error('Failed to load gapi client:auth2: ' + error));
+                        },
+                        timeout: 10000,
+                        ontimeout: () => {
+                            clearTimeout(timeout);
+                            reject(new Error('Timeout loading gapi client:auth2'));
+                        }
+                    });
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reject(new Error('Exception during gapi.load: ' + error.message));
+                }
             });
-            console.log('GAPI client loaded');
             
             console.log('Initializing gapi client...');
-            await gapi.client.init({
-                apiKey: CONFIG.API_KEY,
-                clientId: CONFIG.CLIENT_ID,
-                discoveryDocs: [CONFIG.DISCOVERY_DOC],
-                scope: CONFIG.SCOPES
-            });
-            console.log('GAPI client initialized');
+            try {
+                await gapi.client.init({
+                    apiKey: CONFIG.API_KEY,
+                    clientId: CONFIG.CLIENT_ID,
+                    discoveryDocs: [CONFIG.DISCOVERY_DOC],
+                    scope: CONFIG.SCOPES
+                });
+                console.log('GAPI client initialized successfully');
+            } catch (initError) {
+                console.error('Error initializing gapi client:', initError);
+                throw new Error('Failed to initialize Google API client: ' + initError.details || initError.message);
+            }
 
             const authInstance = gapi.auth2.getAuthInstance();
+            if (!authInstance) {
+                throw new Error('Failed to get auth instance');
+            }
+            
             isSignedIn = authInstance.isSignedIn.get();
             console.log('Initial sign-in status:', isSignedIn);
             
@@ -456,7 +489,7 @@
                     console.log('Sign-in successful');
                 } catch (signInError) {
                     console.error('Sign-in failed:', signInError);
-                    throw new Error('Authentication failed: ' + signInError.error);
+                    throw new Error('Authentication failed: ' + (signInError.error || signInError.message || 'Unknown error'));
                 }
             }
         }
