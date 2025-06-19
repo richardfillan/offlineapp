@@ -367,15 +367,43 @@
         // Load Google API
         function loadGoogleAPI() {
             return new Promise((resolve, reject) => {
-                if (window.gapi) {
+                // Check if already loaded
+                if (window.gapi && window.gapi.load) {
+                    console.log('Google API already loaded');
                     resolve();
                     return;
                 }
                 
+                console.log('Loading Google API script...');
                 const script = document.createElement('script');
                 script.src = 'https://apis.google.com/js/api.js';
-                script.onload = resolve;
-                script.onerror = reject;
+                script.async = true;
+                script.defer = true;
+                
+                script.onload = () => {
+                    console.log('Google API script loaded successfully');
+                    // Wait a bit for gapi to be fully available
+                    setTimeout(() => {
+                        if (window.gapi && window.gapi.load) {
+                            resolve();
+                        } else {
+                            reject(new Error('Google API script loaded but gapi not available'));
+                        }
+                    }, 100);
+                };
+                
+                script.onerror = (error) => {
+                    console.error('Failed to load Google API script:', error);
+                    reject(new Error('Failed to load Google API script. Check your internet connection.'));
+                };
+                
+                // Add timeout
+                setTimeout(() => {
+                    if (!window.gapi) {
+                        reject(new Error('Google API script loading timeout'));
+                    }
+                }, 10000);
+                
                 document.head.appendChild(script);
             });
         }
@@ -393,9 +421,21 @@
             console.log('Client ID:', CONFIG.CLIENT_ID ? 'Set' : 'Missing');
             console.log('Sheet ID:', CONFIG.SHEET_ID ? 'Set' : 'Missing');
             
-            await new Promise((resolve) => gapi.load('client:auth2', resolve));
+            // Verify gapi is available
+            if (!window.gapi || !window.gapi.load) {
+                throw new Error('Google API (gapi) not available. Script may not have loaded properly.');
+            }
+            
+            console.log('Loading gapi client and auth2...');
+            await new Promise((resolve, reject) => {
+                window.gapi.load('client:auth2', {
+                    callback: resolve,
+                    onerror: () => reject(new Error('Failed to load gapi client:auth2'))
+                });
+            });
             console.log('GAPI client loaded');
             
+            console.log('Initializing gapi client...');
             await gapi.client.init({
                 apiKey: CONFIG.API_KEY,
                 clientId: CONFIG.CLIENT_ID,
