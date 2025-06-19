@@ -314,15 +314,11 @@
         </div>
     </div>
 
+    <!-- Load configuration -->
+    <script src="config.js"></script>
+    
     <script>
-        // Configuration - REPLACE THESE WITH YOUR ACTUAL VALUES
-        const CONFIG = {
-            API_KEY: 'AIzaSyCwRUtj-Toxq9FdfBzK6Wztco3oojIcgcE',
-            CLIENT_ID: '276342216052-b5hvo9u20t2qhtp36a82t7ag9gt5kfj2.apps.googleusercontent.com',
-            SHEET_ID: '1DaccKEJC_fSLdyBipOGbmeQ-RUmuUVMrjPLsHIFKmaM',
-            DISCOVERY_DOC: 'https://sheets.googleapis.com/$discovery/rest?version=v4',
-            SCOPES: 'https://www.googleapis.com/auth/spreadsheets'
-        };
+        // Configuration loaded from external file
 
         // Application state
         let gapi;
@@ -353,13 +349,18 @@
             
             // Try to initialize Google API
             try {
+                console.log('Loading Google API...');
                 await loadGoogleAPI();
+                console.log('Google API loaded, initializing...');
                 await initializeGoogleAPI();
+                console.log('Google API initialized successfully');
                 updateStatus('online', 'Connected');
                 await loadAssetsFromSheet();
             } catch (error) {
                 console.error('Failed to initialize Google API:', error);
-                updateStatus('offline', 'Offline Mode');
+                console.error('Error details:', error.details || error.message);
+                updateStatus('offline', 'Offline Mode - ' + (error.message || 'Connection failed'));
+                showError('Failed to connect to Google Sheets: ' + (error.message || 'Please check your credentials'));
             }
         }
 
@@ -381,7 +382,19 @@
 
         // Initialize Google API
         async function initializeGoogleAPI() {
+            // Check if config is loaded
+            if (!window.CONFIG) {
+                throw new Error('Configuration file not loaded. Make sure config.js exists and is accessible.');
+            }
+            
+            const CONFIG = window.CONFIG;
+            console.log('Starting Google API initialization...');
+            console.log('API Key:', CONFIG.API_KEY ? 'Set' : 'Missing');
+            console.log('Client ID:', CONFIG.CLIENT_ID ? 'Set' : 'Missing');
+            console.log('Sheet ID:', CONFIG.SHEET_ID ? 'Set' : 'Missing');
+            
             await new Promise((resolve) => gapi.load('client:auth2', resolve));
+            console.log('GAPI client loaded');
             
             await gapi.client.init({
                 apiKey: CONFIG.API_KEY,
@@ -389,13 +402,22 @@
                 discoveryDocs: [CONFIG.DISCOVERY_DOC],
                 scope: CONFIG.SCOPES
             });
+            console.log('GAPI client initialized');
 
             const authInstance = gapi.auth2.getAuthInstance();
             isSignedIn = authInstance.isSignedIn.get();
+            console.log('Initial sign-in status:', isSignedIn);
             
             if (!isSignedIn) {
-                await authInstance.signIn();
-                isSignedIn = true;
+                console.log('Not signed in, attempting sign-in...');
+                try {
+                    await authInstance.signIn();
+                    isSignedIn = true;
+                    console.log('Sign-in successful');
+                } catch (signInError) {
+                    console.error('Sign-in failed:', signInError);
+                    throw new Error('Authentication failed: ' + signInError.error);
+                }
             }
         }
 
@@ -403,6 +425,7 @@
         async function loadAssetsFromSheet() {
             if (!isSignedIn) return;
             
+            const CONFIG = window.CONFIG;
             showLoading(true);
             
             try {
@@ -436,6 +459,8 @@
 
         // Save asset to Google Sheet
         async function saveAssetToSheet(asset) {
+            const CONFIG = window.CONFIG;
+            
             if (!isSignedIn) {
                 // Add to offline queue
                 offlineQueue.push({ action: 'add', asset });
@@ -463,6 +488,8 @@
 
         // Update asset in Google Sheet
         async function updateAssetInSheet(asset) {
+            const CONFIG = window.CONFIG;
+            
             if (!isSignedIn) {
                 // Add to offline queue
                 offlineQueue.push({ action: 'update', asset });
@@ -488,6 +515,8 @@
 
         // Delete asset from Google Sheet
         async function deleteAssetFromSheet(assetId) {
+            const CONFIG = window.CONFIG;
+            
             if (!isSignedIn) {
                 // Add to offline queue
                 offlineQueue.push({ action: 'delete', assetId });
@@ -523,8 +552,8 @@
         // Form submission handler
         assetForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Form submitted');
             
-            const formData = new FormData(assetForm);
             const asset = {
                 name: document.getElementById('assetName').value.trim(),
                 type: document.getElementById('assetType').value,
@@ -532,15 +561,23 @@
                 date: document.getElementById('purchaseDate').value
             };
 
+            console.log('Asset data:', asset);
+
             // Validation
             if (!asset.name || !asset.type || !asset.supplier || !asset.date) {
                 showError('Please fill in all required fields');
+                console.log('Validation failed - missing fields');
                 return;
             }
+
+            // Disable submit button during processing
+            submitBtn.disabled = true;
+            submitBtn.textContent = editingAsset ? 'Updating...' : 'Adding...';
 
             try {
                 if (editingAsset) {
                     // Update existing asset
+                    console.log('Updating existing asset:', editingAsset.id);
                     asset.id = editingAsset.id;
                     await updateAssetInSheet(asset);
                     
@@ -553,6 +590,7 @@
                     showSuccess('Asset updated successfully');
                 } else {
                     // Add new asset
+                    console.log('Adding new asset');
                     await saveAssetToSheet(asset);
                     showSuccess('Asset added successfully');
                 }
@@ -562,6 +600,7 @@
                 resetForm();
                 
             } catch (error) {
+                console.error('Error saving asset:', error);
                 showError('Failed to save asset. Changes saved locally and will sync when online.');
                 
                 // Save locally anyway
@@ -578,6 +617,10 @@
                 saveOfflineData();
                 renderAssets();
                 resetForm();
+            } finally {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = editingAsset ? 'Update Asset' : 'Add Asset';
             }
         });
 
