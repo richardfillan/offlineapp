@@ -317,13 +317,17 @@
 
     <!-- Load configuration -->
     <script src="config.js"></script>
+    <!-- Load Google Identity Services (newer, more reliable) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Load Google API -->
+    <script src="https://apis.google.com/js/api.js" async defer></script>
     
     <script>
         // Configuration loaded from external file
-
+        
         // Application state
-        let gapi;
         let isSignedIn = false;
+        let accessToken = null;
         let assets = [];
         let editingAsset = null;
         let offlineQueue = [];
@@ -351,7 +355,7 @@
             // Try to initialize Google API
             try {
                 console.log('Loading Google API...');
-                await loadGoogleAPI();
+                await waitForGoogleAPI();
                 console.log('Google API loaded, initializing...');
                 await initializeGoogleAPI();
                 console.log('Google API initialized successfully');
@@ -365,51 +369,30 @@
             }
         }
 
-        // Load Google API
-        function loadGoogleAPI() {
+        // Wait for Google API to load
+        function waitForGoogleAPI() {
             return new Promise((resolve, reject) => {
-                // Check if already loaded
-                if (window.gapi && window.gapi.load) {
-                    console.log('Google API already loaded');
-                    resolve();
-                    return;
-                }
+                let attempts = 0;
+                const maxAttempts = 50; // 5 seconds
                 
-                console.log('Loading Google API script...');
-                const script = document.createElement('script');
-                script.src = 'https://apis.google.com/js/api.js';
-                script.async = true;
-                script.defer = true;
-                
-                script.onload = () => {
-                    console.log('Google API script loaded successfully');
-                    // Wait a bit for gapi to be fully available
-                    setTimeout(() => {
-                        if (window.gapi && window.gapi.load) {
-                            resolve();
-                        } else {
-                            reject(new Error('Google API script loaded but gapi not available'));
-                        }
-                    }, 100);
-                };
-                
-                script.onerror = (error) => {
-                    console.error('Failed to load Google API script:', error);
-                    reject(new Error('Failed to load Google API script. Check your internet connection.'));
-                };
-                
-                // Add timeout
-                setTimeout(() => {
-                    if (!window.gapi) {
-                        reject(new Error('Google API script loading timeout'));
+                const checkAPI = () => {
+                    attempts++;
+                    
+                    if (window.gapi && window.google) {
+                        console.log('Both gapi and google identity services loaded');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        reject(new Error('Timeout waiting for Google APIs to load'));
+                    } else {
+                        setTimeout(checkAPI, 100);
                     }
-                }, 10000);
+                };
                 
-                document.head.appendChild(script);
+                checkAPI();
             });
         }
 
-        // Initialize Google API
+        // Initialize Google API with newer approach
         async function initializeGoogleAPI() {
             // Check if config is loaded
             if (!window.CONFIG) {
@@ -422,76 +405,94 @@
             console.log('Client ID:', CONFIG.CLIENT_ID ? 'Set' : 'Missing');
             console.log('Sheet ID:', CONFIG.SHEET_ID ? 'Set' : 'Missing');
             
-            // Verify gapi is available
-            if (!window.gapi || !window.gapi.load) {
-                throw new Error('Google API (gapi) not available. Script may not have loaded properly.');
-            }
-            
-            console.log('Loading gapi client and auth2...');
-            
-            // Use a more robust loading approach
+            // Initialize Google Identity Services
+            console.log('Initializing Google Identity Services...');
+            google.accounts.id.initialize({
+                client_id: CONFIG.CLIENT_ID,
+                callback: handleCredentialResponse,
+            });
+
+            // Initialize gapi client
+            console.log('Initializing gapi client...');
             await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Timeout loading gapi client:auth2'));
-                }, 15000);
+                gapi.load('client', {
+                    callback: resolve,
+                    onerror: reject
+                });
+            });
+
+            await gapi.client.init({
+                apiKey: CONFIG.API_KEY,
+                discoveryDocs: [CONFIG.DISCOVERY_DOC],
+            });
+
+            console.log('GAPI client initialized');
+
+            // Try to get stored token first
+            const storedToken = localStorage.getItem('google_access_token');
+            if (storedToken) {
+                console.log('Found stored token, testing...');
+                gapi.client.setToken({ access_token: storedToken });
                 
                 try {
-                    window.gapi.load('client:auth2', {
-                        callback: () => {
-                            clearTimeout(timeout);
-                            console.log('GAPI client:auth2 loaded successfully');
-                            resolve();
-                        },
-                        onerror: (error) => {
-                            clearTimeout(timeout);
-                            console.error('Error loading gapi client:auth2:', error);
-                            reject(new Error('Failed to load gapi client:auth2: ' + error));
-                        },
-                        timeout: 10000,
-                        ontimeout: () => {
-                            clearTimeout(timeout);
-                            reject(new Error('Timeout loading gapi client:auth2'));
-                        }
+                    // Test the token by making a simple API call
+                    await gapi.client.sheets.spreadsheets.get({
+                        spreadsheetId: CONFIG.SHEET_ID
                     });
+                    
+                    accessToken = storedToken;
+                    isSignedIn = true;
+                    console.log('Stored token is valid');
+                    return;
                 } catch (error) {
-                    clearTimeout(timeout);
-                    reject(new Error('Exception during gapi.load: ' + error.message));
+                    console.log('Stored token expired, removing...');
+                    localStorage.removeItem('google_access_token');
                 }
-            });
-            
-            console.log('Initializing gapi client...');
-            try {
-                await gapi.client.init({
-                    apiKey: CONFIG.API_KEY,
-                    clientId: CONFIG.CLIENT_ID,
-                    discoveryDocs: [CONFIG.DISCOVERY_DOC],
-                    scope: CONFIG.SCOPES
-                });
-                console.log('GAPI client initialized successfully');
-            } catch (initError) {
-                console.error('Error initializing gapi client:', initError);
-                throw new Error('Failed to initialize Google API client: ' + initError.details || initError.message);
             }
 
-            const authInstance = gapi.auth2.getAuthInstance();
-            if (!authInstance) {
-                throw new Error('Failed to get auth instance');
-            }
-            
-            isSignedIn = authInstance.isSignedIn.get();
-            console.log('Initial sign-in status:', isSignedIn);
-            
-            if (!isSignedIn) {
-                console.log('Not signed in, attempting sign-in...');
-                try {
-                    await authInstance.signIn();
-                    isSignedIn = true;
-                    console.log('Sign-in successful');
-                } catch (signInError) {
-                    console.error('Sign-in failed:', signInError);
-                    throw new Error('Authentication failed: ' + (signInError.error || signInError.message || 'Unknown error'));
-                }
-            }
+            // Need to sign in
+            console.log('No valid token, prompting for sign-in...');
+            await requestSignIn();
+        }
+
+        // Handle credential response from Google Identity Services
+        function handleCredentialResponse(response) {
+            console.log('Received credential response');
+            // This is called when user signs in via popup
+        }
+
+        // Request sign-in using Google Identity Services
+        function requestSignIn() {
+            return new Promise((resolve, reject) => {
+                const CONFIG = window.CONFIG;
+                
+                // Use the newer token client approach
+                const tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CONFIG.CLIENT_ID,
+                    scope: CONFIG.SCOPES,
+                    callback: (response) => {
+                        if (response.access_token) {
+                            console.log('Received access token');
+                            accessToken = response.access_token;
+                            gapi.client.setToken({ access_token: response.access_token });
+                            
+                            // Store token for future use
+                            localStorage.setItem('google_access_token', response.access_token);
+                            
+                            isSignedIn = true;
+                            resolve();
+                        } else {
+                            reject(new Error('Failed to get access token'));
+                        }
+                    },
+                    error_callback: (error) => {
+                        console.error('Token request failed:', error);
+                        reject(new Error('Authentication failed: ' + error.message));
+                    }
+                });
+
+                tokenClient.requestAccessToken();
+            });
         }
 
         // Load assets from Google Sheet
