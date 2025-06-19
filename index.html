@@ -392,7 +392,7 @@
             });
         }
 
-        // Initialize Google API with simpler approach for testing
+        // Initialize Google API with hybrid approach
         async function initializeGoogleAPI() {
             // Check if config is loaded
             if (!window.CONFIG) {
@@ -405,8 +405,8 @@
             console.log('Client ID:', CONFIG.CLIENT_ID ? 'Set' : 'Missing');
             console.log('Sheet ID:', CONFIG.SHEET_ID ? 'Set' : 'Missing');
             
-            // Initialize gapi client with API key only (read-only mode)
-            console.log('Initializing gapi client (API key mode)...');
+            // Initialize gapi client
+            console.log('Initializing gapi client...');
             await new Promise((resolve, reject) => {
                 gapi.load('client', {
                     callback: resolve,
@@ -419,24 +419,129 @@
                 discoveryDocs: [CONFIG.DISCOVERY_DOC],
             });
 
-            console.log('GAPI client initialized (read-only mode)');
+            console.log('GAPI client initialized');
             
-            // Test with read-only access first
+            // Test read access first
             try {
                 await gapi.client.sheets.spreadsheets.get({
                     spreadsheetId: CONFIG.SHEET_ID
                 });
-                
-                console.log('Successfully connected to Google Sheets (read-only)');
-                isSignedIn = true; // Mark as signed in for read operations
-                
-                // Show message about limited functionality
-                showError('Connected in read-only mode. To add/edit assets, complete OAuth setup in Google Cloud Console.');
-                
+                console.log('Read access confirmed');
             } catch (error) {
-                console.error('Failed to connect to Google Sheets:', error);
                 throw new Error('Failed to access Google Sheet. Check API key and sheet permissions.');
             }
+            
+            // Try to get write access
+            try {
+                console.log('Attempting to get write access...');
+                const storedToken = localStorage.getItem('google_access_token');
+                
+                if (storedToken) {
+                    console.log('Testing stored token...');
+                    gapi.client.setToken({ access_token: storedToken });
+                    
+                    // Test write access
+                    await testWriteAccess(CONFIG.SHEET_ID);
+                    accessToken = storedToken;
+                    isSignedIn = true;
+                    console.log('Write access confirmed with stored token');
+                    showSuccess('Connected with full read/write access');
+                    return;
+                }
+                
+                // No valid token, try to get one
+                console.log('Requesting write access...');
+                await requestWriteAccess();
+                showSuccess('Connected with full read/write access');
+                
+            } catch (error) {
+                console.log('Write access failed, using read-only mode:', error.message);
+                isSignedIn = false; // Read-only mode
+                showError('Connected in read-only mode. Click "Enable Write Access" to add/edit assets.');
+                
+                // Add button to enable write access
+                addWriteAccessButton();
+            }
+        }
+
+        // Test if we have write access
+        async function testWriteAccess(sheetId) {
+            // Try to get sheet metadata which requires auth
+            const response = await gapi.client.sheets.spreadsheets.get({
+                spreadsheetId: sheetId,
+                includeGridData: false
+            });
+            
+            // If we can read metadata, we should be able to write
+            console.log('Write access test passed');
+        }
+
+        // Request write access using Google Identity Services
+        function requestWriteAccess() {
+            return new Promise((resolve, reject) => {
+                const CONFIG = window.CONFIG;
+                
+                const tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CONFIG.CLIENT_ID,
+                    scope: CONFIG.SCOPES,
+                    callback: async (response) => {
+                        if (response.access_token) {
+                            console.log('Received access token for write access');
+                            accessToken = response.access_token;
+                            gapi.client.setToken({ access_token: response.access_token });
+                            
+                            // Store token
+                            localStorage.setItem('google_access_token', response.access_token);
+                            
+                            isSignedIn = true;
+                            removeWriteAccessButton();
+                            resolve();
+                        } else {
+                            reject(new Error('Failed to get write access token'));
+                        }
+                    },
+                    error_callback: (error) => {
+                        console.error('Write access request failed:', error);
+                        reject(new Error('Write access authentication failed'));
+                    }
+                });
+
+                tokenClient.requestAccessToken();
+            });
+        }
+
+        // Add button to enable write access
+        function addWriteAccessButton() {
+            const existingBtn = document.getElementById('writeAccessBtn');
+            if (existingBtn) return;
+            
+            const btn = document.createElement('button');
+            btn.id = 'writeAccessBtn';
+            btn.className = 'btn';
+            btn.textContent = 'Enable Write Access';
+            btn.style.marginBottom = '16px';
+            btn.onclick = async () => {
+                try {
+                    btn.textContent = 'Connecting...';
+                    btn.disabled = true;
+                    await requestWriteAccess();
+                    showSuccess('Write access enabled! You can now add/edit assets.');
+                } catch (error) {
+                    showError('Failed to enable write access: ' + error.message);
+                    btn.textContent = 'Enable Write Access';
+                    btn.disabled = false;
+                }
+            };
+            
+            // Add before the form
+            const formCard = document.querySelector('.card');
+            formCard.insertBefore(btn, formCard.firstChild.nextSibling);
+        }
+
+        // Remove write access button
+        function removeWriteAccessButton() {
+            const btn = document.getElementById('writeAccessBtn');
+            if (btn) btn.remove();
         }
 
         // Handle credential response from Google Identity Services
